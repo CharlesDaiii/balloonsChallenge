@@ -11,7 +11,8 @@ import { Loader2, Wind } from "lucide-react";
  */
 
 const HOURS: string[] = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, "0"));
-const WB_BASE = "https://a.windbornesystems.com/treasure/"; // 00.json .. 23.json
+// const WB_BASE = "https://a.windbornesystems.com/treasure/"; // 00.json .. 23.json
+const WB_BASE = "/api/wb/treasure/";
 
 export type Point = { lat: number; lon: number; alt_km: number | null };
 export type Wx = {
