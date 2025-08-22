@@ -263,9 +263,6 @@ export default function App() {
                 </div>
               )}
 
-              <div className="mt-3 text-xs text-gray-500 leading-relaxed">
-                ⚠️ If 00..23.json cannot be fetched directly due to CORS or rate limiting, a thin edge proxy (/api/history) can be added in later stages for aggregation and caching.
-              </div>
             </div>
           )}
         </div>
