@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Popup, useMap, useMapEvents } from "react-leaflet";
 import { Loader2, Wind } from "lucide-react";
 
 /**
@@ -113,10 +113,12 @@ function WindArrow({ deg }: { deg?: number }) {
   );
 }
 
-function FitToBounds({ points }: { points: Point[] }) {
+function FitToBounds({ points, autoFit, force = 0 }: { points: Point[]; autoFit: boolean; force?: number }) {
   const map = useMap();
   useEffect(() => {
     if (!points?.length) return;
+    // Only auto-fit when enabled, or when a one-time force trigger is fired
+    if (!autoFit && force === 0) return;
     const lats = points.map((p) => p.lat);
     const lons = points.map((p) => p.lon);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
@@ -128,7 +130,15 @@ function FitToBounds({ points }: { points: Point[] }) {
       ],
       { padding: [30, 30] }
     );
-  }, [points, map]);
+  }, [points, map, autoFit, force]);
+  return null;
+}
+
+function UserInteractionWatcher({ onInteract }: { onInteract: () => void }) {
+  useMapEvents({
+    movestart: onInteract,
+    zoomstart: onInteract,
+  });
   return null;
 }
 
@@ -141,6 +151,9 @@ export default function App() {
   const [wx, setWx] = useState<Wx | null>(null); // Open‑Meteo response
   const [wxLoading, setWxLoading] = useState<boolean>(false);
   const [wxErr, setWxErr] = useState<string>("");
+
+  const [autoFit, setAutoFit] = useState<boolean>(true);
+  const [fitNonce, setFitNonce] = useState<number>(0);
 
   useEffect(() => {
     if (!selected) return;
@@ -169,7 +182,7 @@ export default function App() {
       {/* Top Bar */}
       <div className="p-3 border-b flex items-center justify-between gap-3 bg-white/90 backdrop-blur sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">🎈 Balloons + 🌬 Open‑Meteo (Pure Frontend)</h1>
+          <h1 className="text-lg font-semibold">🎈 Balloons + 🌬 Open‑Meteo</h1>
           <div className="text-sm text-gray-500 hidden md:block">
             Loaded {byHour.filter(Boolean).length}/24 hours · Total {countAll} points
           </div>
@@ -187,8 +200,22 @@ export default function App() {
           />
           <button
             onClick={() => setHourIdx(0)}
-            className="px-3 py-1.5 rounded-md border text-sm hover:bg-gray-50"
+            className="px-3 py-1.5 rounded-md border text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
           >Back to Current</button>
+          <label className="flex items-center gap-2 text-sm ml-2">
+            <input
+              type="checkbox"
+              checked={autoFit}
+              onChange={(e) => setAutoFit(e.target.checked)}
+            />
+            Auto-fit
+          </label>
+          <button
+            onClick={() => setFitNonce((n) => n + 1)}
+            className="px-3 py-1.5 rounded-md border text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+          >
+            Fit to Data
+          </button>
         </div>
       </div>
 
@@ -202,13 +229,21 @@ export default function App() {
               className="h-full w-full"
               maxBounds={[[-85, -180], [85, 180]]}
               maxBoundsViscosity={1.0}
+              maxZoom={19}
+              minZoom={2}
             >
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                 noWrap={true}
+                maxZoom={19}
+                maxNativeZoom={19}
+                minZoom={2}
+                bounds={[[-85, -180], [85, 180]]}
+                keepBuffer={0}
               />
-              <FitToBounds points={points} />
+              <UserInteractionWatcher onInteract={() => setAutoFit(false)} />
+              <FitToBounds points={points} autoFit={autoFit} force={fitNonce} />
               {points.map((p, i) => (
                 <CircleMarker
                   key={`${p.lat.toFixed(4)}_${p.lon.toFixed(4)}_${i}`}
