@@ -196,10 +196,17 @@ export default function App() {
       <div className="grid md:grid-cols-[2fr_1fr] grid-cols-1 gap-3 p-3">
         <div className="border rounded-xl overflow-hidden bg-white">
           <div className="h-[70vh] md:h-[calc(100vh-150px)]">
-            <MapContainer center={[20, 0]} zoom={2} className="h-full w-full">
+            <MapContainer
+              center={[20, 0]}
+              zoom={2}
+              className="h-full w-full"
+              maxBounds={[[-85, -180], [85, 180]]}
+              maxBoundsViscosity={1.0}
+            >
               <TileLayer
                 attribution='&copy; OpenStreetMap contributors'
                 url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                noWrap={true}
               />
               <FitToBounds points={points} />
               {points.map((p, i) => (
