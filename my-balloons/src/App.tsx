@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 import { Loader2, Wind } from "lucide-react";
 
 /**
@@ -46,40 +46,51 @@ async function fetchHour(hh: string): Promise<Point[]> {
   return rows.map(parseRow).filter(Boolean) as Point[];
 }
 
-function useWindborne(): { loading: boolean; error: string; byHour: Point[][] } {
+function useWindborne(): { loading: boolean; error: string; byHour: Point[][]; progress: number } {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
-  const [byHour, setByHour] = useState<Point[][]>([]);
+  const [byHour, setByHour] = useState<Point[][]>(Array.from({ length: HOURS.length }, () => []));
+  const [progress, setProgress] = useState<number>(0); // 0..1
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setError("");
-        const all = await Promise.all(
-          HOURS.map(async (hh) => {
-            try {
-              return await fetchHour(hh);
-            } catch (e) {
-              console.warn("skip hour", hh, e);
-              return [] as Point[];
-            }
-          })
-        );
-        if (!cancelled) setByHour(all);
-      } catch (e) {
-        if (!cancelled) setError(String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    let completed = 0;
+
+    setLoading(true);
+    setError("");
+    setByHour(Array.from({ length: HOURS.length }, () => []));
+    setProgress(0);
+
+    HOURS.forEach((hh, idx) => {
+      fetchHour(hh)
+        .then((points) => {
+          if (cancelled) return;
+          setByHour((prev) => {
+            const next = prev.slice();
+            next[idx] = points;
+            return next;
+          });
+        })
+        .catch((e) => {
+          console.warn("skip hour", hh, e);
+          // Leave this hour as empty array
+        })
+        .finally(() => {
+          if (cancelled) return;
+          completed += 1;
+          setProgress(completed / HOURS.length);
+          if (completed === HOURS.length) {
+            setLoading(false);
+          }
+        });
+    });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return { loading, error, byHour };
+  return { loading, error, byHour, progress };
 }
 
 async function fetchOpenMeteo(lat: number, lon: number): Promise<Wx> {
@@ -113,37 +124,8 @@ function WindArrow({ deg }: { deg?: number }) {
   );
 }
 
-function FitToBounds({ points, autoFit, force = 0 }: { points: Point[]; autoFit: boolean; force?: number }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!points?.length) return;
-    // Only auto-fit when enabled, or when a one-time force trigger is fired
-    if (!autoFit && force === 0) return;
-    const lats = points.map((p) => p.lat);
-    const lons = points.map((p) => p.lon);
-    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-    const minLon = Math.min(...lons), maxLon = Math.max(...lons);
-    map.fitBounds(
-      [
-        [clamp(minLat, -89.9, 89.9), clamp(minLon, -179.9, 179.9)],
-        [clamp(maxLat, -89.9, 89.9), clamp(maxLon, -179.9, 179.9)],
-      ],
-      { padding: [30, 30] }
-    );
-  }, [points, map, autoFit, force]);
-  return null;
-}
-
-function UserInteractionWatcher({ onInteract }: { onInteract: () => void }) {
-  useMapEvents({
-    movestart: onInteract,
-    zoomstart: onInteract,
-  });
-  return null;
-}
-
 export default function App() {
-  const { loading, error, byHour } = useWindborne();
+  const { loading, error, byHour, progress } = useWindborne();
   const [hourIdx, setHourIdx] = useState<number>(0); // 0 = current (00.json)
   const points: Point[] = byHour[hourIdx] || [];
 
@@ -151,9 +133,6 @@ export default function App() {
   const [wx, setWx] = useState<Wx | null>(null); // Open‑Meteo response
   const [wxLoading, setWxLoading] = useState<boolean>(false);
   const [wxErr, setWxErr] = useState<string>("");
-
-  const [autoFit, setAutoFit] = useState<boolean>(true);
-  const [fitNonce, setFitNonce] = useState<number>(0);
 
   useEffect(() => {
     if (!selected) return;
@@ -202,20 +181,6 @@ export default function App() {
             onClick={() => setHourIdx(0)}
             className="px-3 py-1.5 rounded-md border text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
           >Back to Current</button>
-          <label className="flex items-center gap-2 text-sm ml-2">
-            <input
-              type="checkbox"
-              checked={autoFit}
-              onChange={(e) => setAutoFit(e.target.checked)}
-            />
-            Auto-fit
-          </label>
-          <button
-            onClick={() => setFitNonce((n) => n + 1)}
-            className="px-3 py-1.5 rounded-md border text-sm bg-white text-gray-700 border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
-          >
-            Fit to Data
-          </button>
         </div>
       </div>
 
@@ -225,7 +190,7 @@ export default function App() {
           <div className="h-[70vh] md:h-[calc(100vh-150px)]">
             <MapContainer
               center={[20, 0]}
-              zoom={2}
+              zoom={3}
               className="h-full w-full"
               maxBounds={[[-85, -180], [85, 180]]}
               maxBoundsViscosity={1.0}
@@ -242,8 +207,6 @@ export default function App() {
                 bounds={[[-85, -180], [85, 180]]}
                 keepBuffer={0}
               />
-              <UserInteractionWatcher onInteract={() => setAutoFit(false)} />
-              <FitToBounds points={points} autoFit={autoFit} force={fitNonce} />
               {points.map((p, i) => (
                 <CircleMarker
                   key={`${p.lat.toFixed(4)}_${p.lon.toFixed(4)}_${i}`}
@@ -323,6 +286,24 @@ export default function App() {
           Data source: WindBorne 24-hour snapshots (00..23.json) · Wind field: Open‑Meteo current_weather
         </div>
       </div>
+
+      {loading && (
+        <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-[360px] max-w-[90vw] text-center">
+            <div className="flex items-center justify-center gap-2 mb-3 text-gray-700">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="font-medium">Loading balloon data…</span>
+            </div>
+            <div className="w-full h-2 bg-gray-200 rounded">
+              <div
+                className="h-2 rounded bg-blue-600 transition-all"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <div className="mt-2 text-xs text-gray-500">{Math.round(progress * 100)}%</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
