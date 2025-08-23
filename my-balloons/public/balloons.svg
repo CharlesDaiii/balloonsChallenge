@@ -6,16 +6,12 @@
   <title id="title">Balloon Wind Icon</title>
   <desc id="desc">A stylized balloon with wind swirls, representing balloons and wind data.</desc>
   <defs>
-    <!-- 温和的气球渐变（可改色）：把 --accent 换成你的品牌主色 -->
     <linearGradient id="g-accent" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%"  stop-color="var(--accent, #3b82f6)"/>
       <stop offset="100%" stop-color="var(--accent-2, #22c55e)"/>
     </linearGradient>
   </defs>
 
-  <!-- 背景留白，保证在圆角方形里也好看 -->
-
-  <!-- 气球主体（带渐变填充 + 外描边） -->
   <path d="M32 10c7.7 0 14 6.3 14 14c0 10.2-14 22-14 22S18 34.2 18 24c0-7.7 6.3-14 14-14z"
         fill="url(#g-accent)" stroke="currentColor" stroke-width="2" />
 
